@@ -172,6 +172,9 @@ body{
 .expl .verdict.ok{color:var(--ok);background:var(--ok-soft)}
 .expl .verdict.ng{color:var(--ng);background:var(--ng-soft)}
 .expl .et{font-size:13.5px;line-height:1.85;color:var(--ink2)}
+.expl-link{display:none;margin-top:12px;font-size:13px;font-weight:700;color:var(--acc);text-decoration:none}
+.expl-link.show{display:inline-flex;align-items:center;gap:5px}
+.expl-link:hover{text-decoration:underline}
 .q-foot{padding:14px 20px calc(14px + env(safe-area-inset-bottom));border-top:1px solid var(--hair);background:var(--sf)}
 .next-btn{width:100%;padding:15px;border:none;border-radius:var(--rs);cursor:pointer;
   background:var(--acc);color:#fff;font-family:inherit;font-size:15px;font-weight:700;
@@ -352,6 +355,7 @@ body{
     <div class="expl" id="expl">
       <div class="eh">解説 <span class="verdict" id="verdict"></span></div>
       <div class="et" id="explText"></div>
+      <a class="expl-link" id="explLink" href="#" target="_blank" rel="noopener">解答解説を見る →</a>
     </div>
   </div>
   <div class="q-foot">
@@ -597,14 +601,23 @@ body{
     }
     var flash = el('flash'); flash.className='flash '+(correct?'f-ok':'f-ng');
     setTimeout(function(){ flash.className='flash'; }, 560);
-    // 解説（過去問は公式解説なし→正解番号＋出典を表示）
+    // 解説（過去問は公式解説なし→正解番号を表示し、詳しい解説は外部サイトへのリンクに委ねる）
     var v = el('verdict'); v.textContent = correct?'正解':'不正解';
     v.className = 'verdict '+(correct?'ok':'ng');
+    var linkEl = el('explLink');
     if(q.ex && q.ex.trim()){
       el('explText').textContent = q.ex;
+      linkEl.classList.remove('show');
     } else {
       var ansText = q.opts[q.ans];
-      el('explText').textContent = '正解は ('+(q.ans+1)+') 「'+ansText+'」。 この問題は公式の解説が公表されていないため、選択肢の正誤は各自でご確認ください。 出典: '+CFG.label+' '+q.year;
+      el('explText').textContent = '正解は ('+(q.ans+1)+') 「'+ansText+'」。 出典: '+CFG.label+' '+q.year;
+      if(q.srcUrl){
+        linkEl.href = q.srcUrl;
+        linkEl.classList.add('show');
+      } else {
+        el('explText').textContent += ' この問題は解説ページが見つかっていないため、選択肢の正誤は各自でご確認ください。';
+        linkEl.classList.remove('show');
+      }
     }
     el('expl').classList.add('show');
     el('nextBtn').classList.add('show');
