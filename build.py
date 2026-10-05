@@ -17,6 +17,8 @@ def main():
         tpl = f.read()
     with open(os.path.join(BASE, 'srs-engine.js')) as f:
         eng = f.read()
+    with open(os.path.join(BASE, 'feedback.js')) as f:
+        fb = f.read()
 
     q2 = load('questions.json') or []
     q1 = load('questions-1kyu.json')  # None if not yet generated
@@ -27,11 +29,17 @@ def main():
 
     data_js = 'window.__DATASETS__ = ' + json.dumps(datasets, ensure_ascii=False, separators=(',', ':')) + ';'
 
-    html = tpl.replace('/* __SRS_ENGINE__ */', eng).replace('/* __QUESTIONS_DATA__ */', data_js)
+    # ご意見の届け先（Firebase の受付URL）。最初の版は外へ何も送らないので空。
+    # 入れる時は環境変数 FEEDBACK_URL に受付URLを入れて組み立てる（URLは公開リポジトリに置かない。控えは手元の FEEDBACK_URL.txt）
+    fb_url = os.environ.get('FEEDBACK_URL', '')
+    tpl = tpl.replace('__FB_URL__', fb_url)
+    html = tpl.replace('/* __SRS_ENGINE__ */', eng).replace('/* __FEEDBACK__ */', fb).replace('/* __QUESTIONS_DATA__ */', data_js)
 
     assert '__SRS_ENGINE__' not in html and '__QUESTIONS_DATA__' not in html, '未置換マーカー'
     assert 'window.__DATASETS__' in html
     assert 'window.SRS' in html
+    assert '__FEEDBACK__' not in html and 'window.FEEDBACK' in html
+    assert '__FB_URL__' not in html
 
     out = os.path.join(BASE, 'sekokan-drill.html')
     with open(out, 'w') as f:

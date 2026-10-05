@@ -258,6 +258,42 @@ function ok(cond, msg) {
   ok(SRS.epochDay(86400000 * 2 + 500) === 2, "epochDay: 端数切り捨て");
 }
 
+
+// ---- 2026-10-05 修正: 日の区切り・試験日・試験後・予想得点の分母 ----
+{
+  // 日の区切りは日本時間の朝4時（UTCの0時＝日本の朝9時ではない）
+  const jst = (y, m, d, h, mi) => Date.UTC(y, m - 1, d, h - 9, mi || 0);
+  eq(SRS.epochDay(jst(2026, 10, 5, 8, 30)), SRS.epochDay(jst(2026, 10, 5, 9, 30)), "epochDay: 朝8時半と9時半は同じ日");
+  eq(SRS.epochDay(jst(2026, 10, 5, 3, 59)), SRS.epochDay(jst(2026, 10, 4, 23, 0)), "epochDay: 朝3時59分は前の日");
+  eq(SRS.epochDay(jst(2026, 10, 5, 4, 0)) - SRS.epochDay(jst(2026, 10, 4, 23, 0)), 1, "epochDay: 朝4時で次の日");
+  // 試験日の文字列 → その日の番号（日中に開いた時の epochDay と一致）
+  eq(SRS.dayOfDate("2026-10-25"), SRS.epochDay(jst(2026, 10, 25, 10, 0)), "dayOfDate: 試験日の朝10時と同じ日");
+  eq(SRS.dayOfDate("2026-10-25") - SRS.epochDay(jst(2026, 10, 23, 10, 0)), 2, "dayOfDate: 10/23 の昼は残り2日");
+  // 試験日を過ぎた・未設定なら全問にしない（最低ラインだけ）
+  eq(SRS.dailyGoal(400, -1, 10), 10, "dailyGoal: 試験後は全問にしない");
+  eq(SRS.dailyGoal(400, null, 10), 10, "dailyGoal: 試験日未設定は全問にしない");
+  eq(SRS.dailyGoal(5, -3, 10), 5, "dailyGoal: 試験後でも残りが少なければ残り数");
+  // 予想得点: 手を付けていない問題は取れない（0点）として数える
+  const questions = [
+    { qid: 1, cat: "法規" }, { qid: 2, cat: "法規" }, { qid: 3, cat: "法規" }, { qid: 4, cat: "法規" },
+  ];
+  const states = { 1: { seen: 1, totalCorrect: 1, totalWrong: 0 } }; // 4問中1問だけ解いて正解
+  const p = SRS.projectedScore(questions, states, { 法規: 8 });
+  eq(p.byCat["法規"].projected, 2, "projectedScore: 1/4問しか取れていない→8点中2点（満点にしない）");
+  eq(p.byCat["法規"].total, 4, "projectedScore: total は分野の全問数");
+  eq(p.byCat["法規"].rate, 1, "projectedScore: rate（画面の正答率）は解いた問題の中での割合のまま");
+}
+
+
+// ---- 2026-10-05 旧データ（UTC区切りの日番号）からの移行: 連続日数を切らない ----
+{
+  eq(SRS.streakContinues(99, 100, false), true, "streakContinues: 前日なら続く");
+  eq(SRS.streakContinues(98, 100, false), false, "streakContinues: 2日空けば切れる");
+  eq(SRS.streakContinues(98, 100, true), true, "streakContinues: 旧区切りの記録なら差2まで続く（朝4〜9時のずれ）");
+  eq(SRS.streakContinues(97, 100, true), false, "streakContinues: 旧区切りでも差3は切れる");
+  eq(SRS.streakContinues(null, 100, true), false, "streakContinues: 記録なしは続かない");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fails.length) {
   console.log("\n" + fails.join("\n"));

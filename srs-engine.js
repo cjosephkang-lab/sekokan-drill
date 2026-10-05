@@ -126,14 +126,18 @@ function buildQueue(questions, states, today, subjectOrder) {
 function dailyGoal(remainingCount, daysLeft, minPerDay) {
   const min = minPerDay == null ? 10 : minPerDay;
   if (remainingCount <= 0) return 0;
-  if (daysLeft == null || daysLeft <= 1) return remainingCount; // 前日・当日は全部
+  // 試験日が未設定・過ぎた: 全問にせず最低ラインだけ（画面で次の試験日の入力を促す）
+  if (daysLeft == null || daysLeft < 0) return Math.min(remainingCount, min);
+  if (daysLeft <= 1) return remainingCount; // 前日・当日は全部
   const perDay = Math.ceil(remainingCount / daysLeft);
   return Math.max(perDay, min);
 }
 
 /**
  * 科目別の「予想得点」を、本番の問題数に換算して出す。
- * 例: ある科目を10問中7問正解（70%）→ 本番でその科目が20問なら14点相当。
+ * 例: ある科目の収録40問のうち「取れる」問題が28問（70%）→ 本番でその科目が20問なら14点相当。
+ * 手を付けていない問題は取れない（0点）として数える（1問だけ解いて正解した科目を満点にしない）。
+ * rate は画面に出す「解いた問題の中での正答率」で、予想得点の計算には使わない。
  * @param {Array} questions 全問題
  * @param {object} states id→state
  * @param {object} examWeights cat→本番での問題数
@@ -145,7 +149,8 @@ function projectedScore(questions, states, examWeights) {
   for (const q of questions) {
     const st = states[keyOf(q)];
     const c = q.cat;
-    if (!catStats[c]) catStats[c] = { answered: 0, correct: 0 };
+    if (!catStats[c]) catStats[c] = { answered: 0, correct: 0, total: 0 };
+    catStats[c].total += 1;
     if (st && st.seen > 0) {
       catStats[c].answered += 1;
       // 直近の正誤は correctStreak>0 で近似せず、通算正答率で見る（安定）
@@ -157,13 +162,14 @@ function projectedScore(questions, states, examWeights) {
   for (const cat of Object.keys(examWeights)) {
     const w = examWeights[cat];
     totalExam += w;
-    const s = catStats[cat] || { answered: 0, correct: 0 };
+    const s = catStats[cat] || { answered: 0, correct: 0, total: 0 };
     const rate = s.answered > 0 ? s.correct / s.answered : 0;
-    const projected = Math.round(rate * w);
+    const projected = s.total > 0 ? Math.round((s.correct / s.total) * w) : 0;
     totalProjected += projected;
     byCat[cat] = {
       answered: s.answered,
       correct: s.correct,
+      total: s.total,
       rate,
       projected,
       weight: w,
@@ -173,10 +179,29 @@ function projectedScore(questions, states, examWeights) {
 }
 
 /**
- * エポック日（timestamp→日単位の整数）。UTCベースで安定。
+ * 学習の「日」の番号。日本時間の朝4時で日が変わる（夜中の学習は前の日に数える）。
+ * 日本時間D日の朝4時〜翌朝4時が、UTCのD日0時と同じ番号になる。
  */
+const DAY_SHIFT_MS = 5 * 3600000; // +9時間（日本時間）−4時間（区切り）
+
 function epochDay(ts) {
-  return Math.floor(ts / 86400000);
+  return Math.floor((ts + DAY_SHIFT_MS) / 86400000);
+}
+
+/**
+ * 連続日数が続くか。lastDay が旧区切り（UTC0時＝日本の朝9時）で記録された値なら、
+ * 新区切り（朝4時）とは最大1日ずれるので、差2まで続いたとみなす（移行後の最初の1回だけ使う）。
+ */
+function streakContinues(lastDay, today, legacy) {
+  if (lastDay == null) return false;
+  const gap = today - lastDay;
+  return gap === 1 || (legacy === true && gap === 2);
+}
+
+/** 'YYYY-MM-DD'（試験日など）→ その日の番号（epochDay と同じ物差し） */
+function dayOfDate(ymd) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return Date.UTC(y, m - 1, d) / 86400000;
 }
 
 const SRS = {
@@ -187,6 +212,8 @@ const SRS = {
   dailyGoal,
   projectedScore,
   epochDay,
+  dayOfDate,
+  streakContinues,
 };
 
 if (typeof module !== "undefined" && module.exports) {
